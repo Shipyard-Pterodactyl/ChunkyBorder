@@ -7,6 +7,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.popcraft.chunky.Chunky;
 import org.popcraft.chunky.event.EventBus;
+import org.popcraft.chunky.event.command.ReloadCommandEvent;
 import org.popcraft.chunky.platform.Player;
 import org.popcraft.chunky.platform.World;
 import org.popcraft.chunky.platform.util.Location;
@@ -17,12 +18,12 @@ import org.popcraft.chunky.shape.AbstractPolygon;
 import org.popcraft.chunky.shape.ShapeUtil;
 import org.popcraft.chunky.util.TranslationKey;
 import org.popcraft.chunky.util.Version;
-import org.popcraft.chunkyborder.event.BlockPlaceEvent;
-import org.popcraft.chunkyborder.event.CreatureSpawnEvent;
-import org.popcraft.chunkyborder.event.PlayerQuitEvent;
-import org.popcraft.chunkyborder.event.PlayerTeleportEvent;
-import org.popcraft.chunkyborder.event.WorldLoadEvent;
-import org.popcraft.chunkyborder.event.WorldUnloadEvent;
+import org.popcraft.chunkyborder.event.server.BlockPlaceEvent;
+import org.popcraft.chunkyborder.event.server.CreatureSpawnEvent;
+import org.popcraft.chunkyborder.event.server.PlayerQuitEvent;
+import org.popcraft.chunkyborder.event.server.PlayerTeleportEvent;
+import org.popcraft.chunkyborder.event.server.WorldLoadEvent;
+import org.popcraft.chunkyborder.event.server.WorldUnloadEvent;
 import org.popcraft.chunkyborder.integration.MapIntegration;
 import org.popcraft.chunkyborder.platform.Config;
 import org.popcraft.chunkyborder.platform.MapIntegrationLoader;
@@ -73,30 +74,29 @@ public class ChunkyBorder {
 
     private void subscribeEvents() {
         final EventBus eventBus = chunky.getEventBus();
+        eventBus.subscribe(ReloadCommandEvent.class, e -> getConfig().reload());
         eventBus.subscribe(PlayerTeleportEvent.class, e -> {
             final Optional<BorderData> borderData = getBorder(e.getLocation().getWorld().getName());
             e.redirect(borderData.map(BorderData::getBorder)
                     .filter(border -> !border.isBounding(e.getLocation().getX(), e.getLocation().getZ()))
                     .filter(border -> !e.getPlayer().hasPermission("chunkyborder.bypass.move"))
+                    .filter(border -> !this.getPlayerData(e.getPlayer().getUUID()).isBypassing())
                     .map(border -> {
-                        e.setCancelled(e.isUsingEnderpearl() && config.preventEnderpearl());
                         final Vector2 center = Vector2.of(borderData.get().getCenterX(), borderData.get().getCenterZ());
                         final World world = e.getLocation().getWorld();
                         final Vector3 locationVector = e.getLocation().toVector();
                         final Vector2 to = Vector2.of(locationVector.getX(), locationVector.getZ());
                         final List<Vector2> intersections = new ArrayList<>();
-                        if (border instanceof AbstractPolygon) {
-                            final AbstractPolygon polygonBorder = (AbstractPolygon) border;
-                            final List<Vector2> points = polygonBorder.points();
+                        if (border instanceof final AbstractPolygon polygon) {
+                            final List<Vector2> points = polygon.points();
                             final int size = points.size();
                             for (int i = 0; i < size; ++i) {
                                 final Vector2 p1 = points.get(i);
                                 final Vector2 p2 = points.get(i == size - 1 ? 0 : i + 1);
                                 ShapeUtil.intersection(center.getX(), center.getZ(), to.getX(), to.getZ(), p1.getX(), p1.getZ(), p2.getX(), p2.getZ()).ifPresent(intersections::add);
                             }
-                        } else if (border instanceof AbstractEllipse) {
-                            final AbstractEllipse ellipticalBorder = (AbstractEllipse) border;
-                            final Vector2 radii = ellipticalBorder.radii();
+                        } else if (border instanceof final AbstractEllipse ellipse) {
+                            final Vector2 radii = ellipse.radii();
                             final double angle = Math.atan2(to.getZ() - center.getX(), to.getX() - center.getZ());
                             intersections.add(ShapeUtil.pointOnEllipse(center.getX(), center.getZ(), radii.getX(), radii.getZ(), angle));
                         }
@@ -119,7 +119,11 @@ public class ChunkyBorder {
                         final Location insideBorder = new Location(world, closest.getX(), 0, closest.getZ());
                         insideBorder.add(centerDirection);
                         insideBorder.setDirection(centerDirection);
-                        insideBorder.setY(world.getElevation((int) insideBorder.getX(), (int) insideBorder.getZ()) + 1d);
+                        final int elevation = world.getElevation((int) insideBorder.getX(), (int) insideBorder.getZ());
+                        if (elevation >= world.getMaxElevation()) {
+                            return world.getSpawn();
+                        }
+                        insideBorder.setY(elevation);
                         final Player player = e.getPlayer();
                         if (config.useActionBar()) {
                             player.sendActionBar("custom_border_message");
@@ -131,12 +135,12 @@ public class ChunkyBorder {
                     })
                     .orElse(null));
         });
-        eventBus.subscribe(WorldLoadEvent.class, e -> getBorder(e.getWorld().getName())
+        eventBus.subscribe(WorldLoadEvent.class, e -> getBorder(e.world().getName())
                 .map(BorderData::getBorder)
-                .ifPresent(border -> mapIntegrations.forEach(mapIntegration -> mapIntegration.addShapeMarker(e.getWorld(), border))));
-        eventBus.subscribe(WorldUnloadEvent.class, e -> getBorder(e.getWorld().getName())
+                .ifPresent(border -> mapIntegrations.forEach(mapIntegration -> mapIntegration.addShapeMarker(e.world(), border))));
+        eventBus.subscribe(WorldUnloadEvent.class, e -> getBorder(e.world().getName())
                 .map(BorderData::getBorder)
-                .ifPresent(border -> mapIntegrations.forEach(mapIntegration -> mapIntegration.removeShapeMarker(e.getWorld()))));
+                .ifPresent(border -> mapIntegrations.forEach(mapIntegration -> mapIntegration.removeShapeMarker(e.world()))));
         eventBus.subscribe(CreatureSpawnEvent.class, e -> e.setCancelled(getBorder(e.getLocation().getWorld().getName())
                 .map(BorderData::getBorder)
                 .map(border -> !border.isBounding(e.getLocation().getX(), e.getLocation().getZ()))
@@ -152,7 +156,7 @@ public class ChunkyBorder {
                     })
                     .orElse(false));
         });
-        eventBus.subscribe(PlayerQuitEvent.class, e -> players.remove(e.getPlayer().getUUID()));
+        eventBus.subscribe(PlayerQuitEvent.class, e -> players.remove(e.player().getUUID()));
     }
 
     public boolean hasCompatibleChunkyVersion() {
@@ -210,8 +214,7 @@ public class ChunkyBorder {
     }
 
     public PlayerData getPlayerData(final UUID uuid) {
-        this.players.computeIfAbsent(uuid, x -> new PlayerData(uuid));
-        return players.get(uuid);
+        return this.players.computeIfAbsent(uuid, x -> new PlayerData(uuid));
     }
 
     public Version getVersion() {
@@ -243,6 +246,19 @@ public class ChunkyBorder {
             fileWriter.write(new GsonBuilder().setPrettyPrinting().create().toJson(borders));
         } catch (IOException e) {
             LOGGER.warn(() -> translate(TranslationKey.BORDER_SAVE_FAILED));
+        }
+    }
+
+    public void addBorders() {
+        for (BorderData border : borders.values()) {
+            if (border.getWorld() == null) {
+                continue;
+            }
+            final Optional<World> world = chunky.getServer().getWorld(border.getWorld());
+            if (world.isEmpty()) {
+                continue;
+            }
+            mapIntegrations.forEach(mapIntegration -> mapIntegration.addShapeMarker(world.get(), border.getBorder()));
         }
     }
 }

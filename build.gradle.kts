@@ -1,24 +1,15 @@
 import java.io.ByteArrayOutputStream
 
-buildscript {
-    configurations.all {
-        resolutionStrategy {
-            force("org.ow2.asm:asm:9.3")
-            force("org.ow2.asm:asm-commons:9.3")
-        }
-    }
-}
-
 plugins {
     id("java-library")
     id("maven-publish")
-    id("com.github.johnrengelman.shadow") version "7.1.2"
+    id("io.github.goooler.shadow") version "8.1.7"
 }
 
 subprojects {
     plugins.apply("java-library")
     plugins.apply("maven-publish")
-    plugins.apply("com.github.johnrengelman.shadow")
+    plugins.apply("io.github.goooler.shadow")
 
     group = "${project.property("group")}"
     version = "${project.property("version")}.${commitsSinceLastTag()}"
@@ -36,7 +27,7 @@ subprojects {
 
     java {
         toolchain {
-            languageVersion.set(JavaLanguageVersion.of(17))
+            languageVersion.set(JavaLanguageVersion.of(21))
         }
         withSourcesJar()
     }
@@ -44,13 +35,14 @@ subprojects {
     tasks {
         withType<JavaCompile> {
             options.encoding = "UTF-8"
+            options.release = 21
         }
         jar {
             archiveClassifier.set("noshade")
         }
         shadowJar {
             archiveClassifier.set("")
-            archiveFileName.set("ChunkyBorder-${project.version}.jar")
+            archiveFileName.set("${project.property("artifactName")}-${project.version}.jar")
         }
         build {
             dependsOn(shadowJar)

@@ -21,9 +21,19 @@ public interface Config {
 
     boolean preventEnderpearl();
 
+    boolean preventChorusFruit();
+
+    boolean visualizerEnabled();
+
+    int visualizerRange();
+
+    String visualizerColor();
+
     boolean blueMapEnabled();
 
     boolean dynmapEnabled();
+
+    boolean pl3xmapEnabled();
 
     boolean squaremapEnabled();
 
@@ -36,4 +46,6 @@ public interface Config {
     int weight();
 
     int priority();
+
+    void reload();
 }

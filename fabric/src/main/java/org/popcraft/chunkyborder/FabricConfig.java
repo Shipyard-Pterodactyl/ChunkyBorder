@@ -21,11 +21,7 @@ public class FabricConfig implements Config {
 
     public FabricConfig(final Path savePath) {
         this.savePath = savePath;
-        if (Files.exists(this.savePath)) {
-            load();
-        } else {
-            saveConfig();
-        }
+        reload();
     }
 
     @Override
@@ -74,6 +70,26 @@ public class FabricConfig implements Config {
     }
 
     @Override
+    public boolean preventChorusFruit() {
+        return Optional.ofNullable(configModel.borderOptions.preventChorusFruit).orElse(false);
+    }
+
+    @Override
+    public boolean visualizerEnabled() {
+        return Optional.ofNullable(configModel.borderOptions.visualizerEnabled).orElse(false);
+    }
+
+    @Override
+    public int visualizerRange() {
+        return Optional.ofNullable(configModel.borderOptions.visualizerRange).orElse(8);
+    }
+
+    @Override
+    public String visualizerColor() {
+        return Optional.ofNullable(configModel.borderOptions.visualizerColor).orElse("20A0FF");
+    }
+
+    @Override
     public boolean blueMapEnabled() {
         return configModel.mapOptions.enable.getOrDefault("bluemap", true);
     }
@@ -81,6 +97,11 @@ public class FabricConfig implements Config {
     @Override
     public boolean dynmapEnabled() {
         return configModel.mapOptions.enable.getOrDefault("dynmap", true);
+    }
+
+    @Override
+    public boolean pl3xmapEnabled() {
+        return configModel.mapOptions.enable.getOrDefault("pl3xmap", true);
     }
 
     @Override
@@ -113,7 +134,11 @@ public class FabricConfig implements Config {
         return Optional.ofNullable(configModel.mapOptions.priority).orElse(0);
     }
 
-    public void load() {
+    @Override
+    public void reload() {
+        if (!Files.exists(this.savePath)) {
+            save();
+        }
         try (final Reader reader = Files.newBufferedReader(savePath)) {
             configModel = GSON.fromJson(reader, ConfigModel.class);
         } catch (IOException e) {
@@ -121,7 +146,7 @@ public class FabricConfig implements Config {
         }
     }
 
-    private void saveConfig() {
+    private void save() {
         try {
             Files.createDirectories(savePath.getParent());
         } catch (IOException e) {
@@ -138,7 +163,7 @@ public class FabricConfig implements Config {
     private static class ConfigModel {
         private Integer version = 1;
         private BorderOptions borderOptions = new BorderOptions();
-        private MapOptions mapOptions = new MapOptions(List.of("bluemap", "dynmap", "squaremap"));
+        private MapOptions mapOptions = new MapOptions(List.of("bluemap", "dynmap", "pl3xmap", "squaremap"));
 
         public Integer getVersion() {
             return version;
@@ -174,6 +199,10 @@ public class FabricConfig implements Config {
         private String sound = "entity.enderman.teleport";
         private Boolean preventMobSpawns = false;
         private Boolean preventEnderpearl = false;
+        private Boolean preventChorusFruit = false;
+        private Boolean visualizerEnabled = false;
+        private Integer visualizerRange = 8;
+        private String visualizerColor = "20A0FF";
 
         public Integer getCheckInterval() {
             return checkInterval;
@@ -229,6 +258,38 @@ public class FabricConfig implements Config {
 
         public void setPreventEnderpearl(final Boolean preventEnderpearl) {
             this.preventEnderpearl = preventEnderpearl;
+        }
+
+        public Boolean getPreventChorusFruit() {
+            return preventChorusFruit;
+        }
+
+        public void setPreventChorusFruit(final Boolean preventChorusFruit) {
+            this.preventChorusFruit = preventChorusFruit;
+        }
+
+        public Boolean getVisualizerEnabled() {
+            return visualizerEnabled;
+        }
+
+        public void setVisualizerEnabled(final Boolean visualizerEnabled) {
+            this.visualizerEnabled = visualizerEnabled;
+        }
+
+        public Integer getVisualizerRange() {
+            return visualizerRange;
+        }
+
+        public void setVisualizerRange(final Integer visualizerRange) {
+            this.visualizerRange = visualizerRange;
+        }
+
+        public String getVisualizerColor() {
+            return visualizerColor;
+        }
+
+        public void setVisualizerColor(final String visualizerColor) {
+            this.visualizerColor = visualizerColor;
         }
     }
 

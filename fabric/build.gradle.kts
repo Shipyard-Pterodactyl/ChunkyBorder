@@ -1,5 +1,5 @@
 plugins {
-    id("fabric-loom") version "0.11-SNAPSHOT"
+    id("dev.architectury.loom") version "1.5-SNAPSHOT"
 }
 
 val shade: Configuration by configurations.creating
@@ -7,17 +7,22 @@ val shade: Configuration by configurations.creating
 repositories {
     maven("https://repo.mikeprimm.com")
     maven("https://jitpack.io")
+    exclusiveContent {
+        forRepository { maven("https://api.modrinth.com/maven") }
+        filter { includeGroup("maven.modrinth") }
+    }
 }
 
 dependencies {
-    minecraft(group = "com.mojang", name = "minecraft", version = "1.19")
-    mappings(group = "net.fabricmc", name = "yarn", version = "1.19+build.1", classifier = "v2")
-    modImplementation(group = "net.fabricmc", name = "fabric-loader", version = "0.14.6")
-    modImplementation(group = "net.fabricmc.fabric-api", name = "fabric-api", version = "0.55.2+1.19")
+    minecraft(group = "com.mojang", name = "minecraft", version = "1.20.2")
+    mappings(group = "net.fabricmc", name = "yarn", version = "1.20.2+build.4", classifier = "v2")
+    modImplementation(group = "net.fabricmc", name = "fabric-loader", version = "0.14.22")
+    modImplementation(group = "net.fabricmc.fabric-api", name = "fabric-api", version = "0.89.3+1.20.2")
     modImplementation(group = "org.popcraft", name = "chunky-fabric", version = "${project.property("target")}")
-    compileOnly(group = "us.dynmap", name = "DynmapCoreAPI", version = "3.3")
-    compileOnly(group = "com.github.BlueMap-Minecraft", name = "BlueMapAPI", version = "v1.7.0")
-    compileOnly(group = "xyz.jpenilla", name = "squaremap-api", version = "1.1.2")
+    compileOnly(group = "us.dynmap", name = "DynmapCoreAPI", version = "${project.property("target_dynmap")}")
+    compileOnly(group = "com.github.BlueMap-Minecraft", name = "BlueMapAPI", version = "${project.property("target_bluemap")}")
+    compileOnly(group = "xyz.jpenilla", name = "squaremap-api", version = "${project.property("target_squaremap")}")
+    compileOnly(group = "maven.modrinth", name = "pl3xmap", version = "${project.property("target_pl3xmap")}")
     implementation(project(":chunkyborder-common"))
     shade(project(":chunkyborder-common"))
 }
@@ -28,7 +33,7 @@ tasks {
             expand(
                 "id" to rootProject.name,
                 "version" to project.version,
-                "name" to rootProject.name.capitalize(),
+                "name" to project.property("artifactName"),
                 "description" to project.property("description"),
                 "author" to project.property("author"),
                 "github" to project.property("github"),
@@ -43,6 +48,6 @@ tasks {
     }
     remapJar {
         inputFile.set(shadowJar.get().archiveFile)
-        archiveFileName.set("ChunkyBorder-${project.version}.jar")
+        archiveFileName.set("${project.property("artifactName")}-${project.version}.jar")
     }
 }

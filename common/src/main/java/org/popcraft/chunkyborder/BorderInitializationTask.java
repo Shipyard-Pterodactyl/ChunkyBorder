@@ -1,11 +1,9 @@
 package org.popcraft.chunkyborder;
 
-import org.popcraft.chunky.platform.World;
 import org.popcraft.chunkyborder.integration.MapIntegration;
 import org.popcraft.chunkyborder.platform.MapIntegrationLoader;
 
 import java.util.List;
-import java.util.Optional;
 
 public class BorderInitializationTask implements Runnable {
     private final ChunkyBorder chunkyBorder;
@@ -29,21 +27,15 @@ public class BorderInitializationTask implements Runnable {
         if (chunkyBorder.getConfig().dynmapEnabled()) {
             mapIntegrationLoader.loadDynmap().ifPresent(mapIntegrations::add);
         }
+        if (chunkyBorder.getConfig().pl3xmapEnabled()) {
+            mapIntegrationLoader.loadPl3xMap().ifPresent(mapIntegrations::add);
+        }
         if (chunkyBorder.getConfig().squaremapEnabled()) {
             mapIntegrationLoader.loadSquaremap().ifPresent(mapIntegrations::add);
         }
         for (MapIntegration mapIntegration : mapIntegrations) {
             mapIntegration.setOptions(label, color, hideByDefault, priority, weight);
         }
-        for (BorderData border : chunkyBorder.getBorders().values()) {
-            if (border.getWorld() == null) {
-                continue;
-            }
-            final Optional<World> world = chunkyBorder.getChunky().getServer().getWorld(border.getWorld());
-            if (!world.isPresent()) {
-                continue;
-            }
-            mapIntegrations.forEach(mapIntegration -> mapIntegration.addShapeMarker(world.get(), border.getBorder()));
-        }
+        chunkyBorder.addBorders();
     }
 }

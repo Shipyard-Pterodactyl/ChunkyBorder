@@ -57,6 +57,26 @@ public class BukkitConfig implements Config {
     }
 
     @Override
+    public boolean preventChorusFruit() {
+        return chunkyBorderBukkit.getConfig().getBoolean("border-options.prevent-chorus-fruit", false);
+    }
+
+    @Override
+    public boolean visualizerEnabled() {
+        return chunkyBorderBukkit.getConfig().getBoolean("border-options.visualizer-enabled", false);
+    }
+
+    @Override
+    public int visualizerRange() {
+        return chunkyBorderBukkit.getConfig().getInt("border-options.visualizer-range", 8);
+    }
+
+    @Override
+    public String visualizerColor() {
+        return chunkyBorderBukkit.getConfig().getString("border-options.visualizer-color", "20A0FF");
+    }
+
+    @Override
     public boolean blueMapEnabled() {
         return chunkyBorderBukkit.getConfig().getBoolean("map-options.enable.bluemap", true);
     }
@@ -64,6 +84,11 @@ public class BukkitConfig implements Config {
     @Override
     public boolean dynmapEnabled() {
         return chunkyBorderBukkit.getConfig().getBoolean("map-options.enable.dynmap", true);
+    }
+
+    @Override
+    public boolean pl3xmapEnabled() {
+        return chunkyBorderBukkit.getConfig().getBoolean("map-options.enable.pl3xmap", true);
     }
 
     @Override
@@ -94,5 +119,10 @@ public class BukkitConfig implements Config {
     @Override
     public int priority() {
         return chunkyBorderBukkit.getConfig().getInt("map-options.priority", 0);
+    }
+
+    @Override
+    public void reload() {
+        chunkyBorderBukkit.reloadConfig();
     }
 }
