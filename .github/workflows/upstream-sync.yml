@@ -1,0 +1,72 @@
+# Written by Shipyard. Follows the upstream named in .github/upstream.json:
+# merges its newest matching tag into the default branch, then starts the build.
+name: Upstream sync
+on:
+  schedule:
+    - cron: '33 */6 * * *'
+  workflow_dispatch:
+concurrency: upstream-sync
+permissions:
+  contents: write
+  actions: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Merge the newest upstream tag
+        shell: sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.event.repository.default_branch }}
+          BUILD_WORKFLOW: 'build.yml'
+          SYNC_NAME: 'github-actions[bot]'
+          SYNC_EMAIL: '41898282+github-actions[bot]@users.noreply.github.com'
+        run: |
+          set -eu
+          cfg=.github/upstream.json
+          say() { printf '%s\n' "$1"; printf '%s\n' "$1" >>"${GITHUB_STEP_SUMMARY:-/dev/null}"; }
+          fail() { printf '::error::%s\n' "$1"; printf '%s\n' "$1" >>"${GITHUB_STEP_SUMMARY:-/dev/null}"; exit 1; }
+          field() { tr -d '\n\r' <"$cfg" | sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" | sed 's/\\\\/\\/g; s/\\\//\//g'; }
+          [ -f "$cfg" ] || fail "$cfg is missing."
+          url=$(field url)
+          pattern=$(field tagPattern)
+          follow=$(field follow)
+          [ -n "$url" ] || fail "$cfg has no url."
+          [ -n "$pattern" ] || pattern='^v?[0-9]+(\.[0-9]+)+$'
+          [ -z "$follow" ] || [ "$follow" = tags ] || fail "Only \"follow\": \"tags\" is supported."
+          git fetch --no-tags --force --quiet "$url" '+refs/tags/*:refs/upstream-tags/*' || fail "Could not fetch tags from $url."
+          # Newest by version: each run of digits is compared as a number, so "v" prefixes and 1.10 vs 1.9 sort right.
+          tag=$(git for-each-ref --format='%(refname:lstrip=2)' refs/upstream-tags | grep -E -e "$pattern" \
+            | awk '{ k = ""; s = $0; while (match(s, /[0-9]+/)) { n = substr(s, RSTART, RLENGTH); sub(/^0+/, "", n); k = k sprintf("%04d", length(n)) n "."; s = substr(s, RSTART + RLENGTH) } print k "\t" $0 }' \
+            | sort -r | head -n 1 | cut -f 2 || true)
+          [ -n "$tag" ] || fail "No upstream tag matches $pattern."
+          want=$(git rev-parse "refs/upstream-tags/$tag^{commit}")
+          echo "tag=$tag" >>"${GITHUB_OUTPUT:-/dev/null}"
+          if git merge-base --is-ancestor "$want" HEAD; then
+            say "Already up to date with upstream $tag."
+            exit 0
+          fi
+          git merge-base HEAD "$want" >/dev/null 2>&1 || fail "No merge base with upstream $tag: re-base on upstream once, by hand."
+          if ! git -c user.name="$SYNC_NAME" -c user.email="$SYNC_EMAIL" merge --no-ff --no-edit -m "Merge upstream tag $tag" "$want" >/dev/null 2>&1; then
+            files=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
+            git merge --abort
+            fail "Merging upstream $tag conflicts in: ${files% }. Merge it by hand."
+          fi
+          touched=$(git diff --name-only HEAD^1 HEAD -- .github/workflows | tr '\n' ' ')
+          if [ -n "$touched" ]; then
+            git reset --hard --quiet HEAD^1
+            fail "Upstream $tag changes ${touched% }: merge it by hand."
+          fi
+          git push --quiet origin "HEAD:refs/heads/$BRANCH" || fail "Could not push $BRANCH."
+          if [ -n "${BUILD_WORKFLOW:-}" ]; then
+            curl -fsS -o /dev/null -X POST -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "${GITHUB_API_URL:-https://api.github.com}/repos/$GITHUB_REPOSITORY/actions/workflows/$BUILD_WORKFLOW/dispatches" -d "{\"ref\":\"$BRANCH\"}" \
+              || fail "Merged upstream $tag and pushed $BRANCH, but could not start $BUILD_WORKFLOW."
+            say "Merged upstream $tag into $BRANCH and started $BUILD_WORKFLOW."
+          else
+            say "Merged upstream $tag into $BRANCH (no build workflow to start)."
+          fi
